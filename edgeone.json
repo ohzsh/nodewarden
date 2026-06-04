@@ -1,6 +1,7 @@
 {
   "name": "nodewarden",
   "installCommand": "npm ci",
+  "devCommand": "npm run dev:edgeone:vite --",
   "buildCommand": "npm run build:edgeone",
   "outputDirectory": "./dist",
   "nodeVersion": "22.11.0",

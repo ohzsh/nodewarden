@@ -10,9 +10,11 @@
     "dev": "npm run build && wrangler dev -c wrangler.toml",
     "dev:kv": "npm run build && wrangler dev -c wrangler.kv.toml",
     "dev:demo": "vite --config webapp/vite.config.ts --mode demo --host 127.0.0.1 --port 5174",
+    "dev:edgeone:vite": "vite --config webapp/vite.config.ts --host 127.0.0.1",
     "build": "vite build --config webapp/vite.config.ts",
+    "build:edgeone:functions": "node scripts/build-edgeone-functions.cjs",
     "build:demo": "vite build --config webapp/vite.config.ts --mode demo && node scripts/pages-spa-redirects.cjs",
-    "build:edgeone": "npm run build && node scripts/pages-spa-redirects.cjs",
+    "build:edgeone": "npm run build && node scripts/pages-spa-redirects.cjs && npm run build:edgeone:functions",
     "domains:sync": "node scripts/sync-global-domains.mjs",
     "i18n": "node scripts/i18n-validate.cjs",
     "i18n:validate": "node scripts/i18n-validate.cjs",
@@ -20,7 +22,7 @@
     "deploy": "wrangler deploy",
     "deploy:kv": "node scripts/ensure-kv.cjs && wrangler deploy -c wrangler.kv.toml",
     "deploy:demo": "npm run build:demo && wrangler pages deploy dist --project-name nw-demo",
-    "dev:edgeone": "edgeone pages dev",
+    "dev:edgeone": "NODEWARDEN_EDGEONE_LOCAL_BLOB=1 JWT_SECRET=nodewarden-local-edgeone-dev npm run build:edgeone:functions && NODEWARDEN_EDGEONE_LOCAL_BLOB=1 JWT_SECRET=nodewarden-local-edgeone-dev edgeone pages dev --skip-env-sync",
     "deploy:edgeone": "edgeone pages deploy"
   },
   "keywords": [

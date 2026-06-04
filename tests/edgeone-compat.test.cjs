@@ -17,10 +17,15 @@ test('EdgeOne build metadata is declared for Pages deployment', () => {
   const pkg = readJson('package.json');
   const config = readJson('edgeone.json');
 
-  assert.equal(pkg.scripts['build:edgeone'], 'npm run build && node scripts/pages-spa-redirects.cjs');
-  assert.equal(pkg.scripts['dev:edgeone'], 'edgeone pages dev');
+  assert.equal(pkg.scripts['build:edgeone:functions'], 'node scripts/build-edgeone-functions.cjs');
+  assert.equal(pkg.scripts['build:edgeone'], 'npm run build && node scripts/pages-spa-redirects.cjs && npm run build:edgeone:functions');
+  assert.equal(
+    pkg.scripts['dev:edgeone'],
+    'NODEWARDEN_EDGEONE_LOCAL_BLOB=1 JWT_SECRET=nodewarden-local-edgeone-dev npm run build:edgeone:functions && NODEWARDEN_EDGEONE_LOCAL_BLOB=1 JWT_SECRET=nodewarden-local-edgeone-dev edgeone pages dev --skip-env-sync'
+  );
   assert.equal(pkg.scripts['deploy:edgeone'], 'edgeone pages deploy');
 
+  assert.equal(config.devCommand, 'npm run dev:edgeone:vite --');
   assert.equal(config.buildCommand, 'npm run build:edgeone');
   assert.equal(config.installCommand, 'npm ci');
   assert.equal(config.outputDirectory, './dist');
@@ -38,13 +43,16 @@ test('EdgeOne build metadata is declared for Pages deployment', () => {
 });
 
 test('EdgeOne Cloud Functions expose catch-all API entrypoints', () => {
-  const api = readText('cloud-functions/api/[[default]].ts');
-  const identity = readText('cloud-functions/identity/[[default]].ts');
-  const config = readText('cloud-functions/config.ts');
+  const api = readText('cloud-functions/api/[[default]].js');
+  const identity = readText('cloud-functions/identity/[[default]].js');
+  const config = readText('cloud-functions/config.js');
 
   assert.match(api, /handleEdgeOnePagesRequest/);
   assert.match(identity, /handleEdgeOnePagesRequest/);
   assert.match(config, /handleEdgeOnePagesRequest/);
+  assert.match(api, /_generated\/edgeone-handler\.mjs/);
+  assert.match(identity, /_generated\/edgeone-handler\.mjs/);
+  assert.match(config, /_generated\/edgeone-handler\.mjs/);
 });
 
 test('generic handlers import notification helpers without cloudflare runtime dependency', () => {

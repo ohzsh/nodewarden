@@ -49,3 +49,9 @@ settings.json
 .claude/
 NodeWarden-compat/
 .codex-upstream/
+
+# Tencent Cloud EdgeOne
+.env
+.edgeone/*
+.tef_dist/*
+cloud-functions/_generated/*
