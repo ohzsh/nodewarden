@@ -94,10 +94,62 @@ function createEdgeOneBlobStore(context: EdgeOnePagesContext, name: string): Edg
   return getStore({ name, consistency: 'strong' }) as EdgeOneBlobStore;
 }
 
+function firstHeaderValue(value: string | null): string | null {
+  const normalized = value?.split(',')[0]?.trim();
+  return normalized || null;
+}
+
+function unquoteForwardedValue(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.startsWith('"') && trimmed.endsWith('"') ? trimmed.slice(1, -1) : trimmed;
+}
+
+function normalizePublicHost(value: string | null): string | null {
+  const host = unquoteForwardedValue(firstHeaderValue(value) || '');
+  if (!host || host.includes('/') || host.includes('\\') || host.includes('@')) return null;
+  try {
+    return new URL(`https://${host}`).host || null;
+  } catch {
+    return null;
+  }
+}
+
+function readPublicHost(headers: Headers): string | null {
+  return (
+    normalizePublicHost(headers.get('X-Forwarded-Host')) ||
+    normalizePublicHost(headers.get('Host'))
+  );
+}
+
+function normalizePublicProtocol(value: string | null): 'http:' | 'https:' | null {
+  const protocol = unquoteForwardedValue(firstHeaderValue(value) || '').replace(/:$/, '').toLowerCase();
+  if (protocol === 'http' || protocol === 'https') return `${protocol}:`;
+  if (protocol === 'quic') return 'https:';
+  return null;
+}
+
+function readPublicProtocol(request: Request, fallback: string): 'http:' | 'https:' {
+  return (
+    normalizePublicProtocol(request.headers.get('X-Forwarded-Proto')) ||
+    (fallback === 'https:' ? 'https:' : 'http:')
+  );
+}
+
+function applyPublicOrigin(url: URL, publicHost: string, publicProtocol: 'http:' | 'https:'): void {
+  const origin = new URL(`${publicProtocol}//${publicHost}`);
+  url.protocol = origin.protocol;
+  url.hostname = origin.hostname;
+  url.port = origin.port;
+}
+
 function normalizeRequestUrl(request: Request): Request {
   const url = new URL(request.url);
+  const publicHost = readPublicHost(request.headers);
+  if (publicHost) {
+    applyPublicOrigin(url, publicHost, readPublicProtocol(request, url.protocol));
+  }
   const normalizedPathname = url.pathname.length <= 1 ? url.pathname : url.pathname.replace(/\/+$/, '');
-  if (normalizedPathname === url.pathname) return request;
+  if (normalizedPathname === url.pathname && url.toString() === request.url) return request;
   url.pathname = normalizedPathname;
   return new Request(url.toString(), request);
 }
