@@ -276,6 +276,7 @@ export interface VaultDraft {
   sshPublicKey: string;
   sshFingerprint: string;
   customFields: VaultDraftField[];
+  importPasswordHistory?: CipherPasswordHistoryEntry[] | null;
 }
 
 export interface ListResponse<T> {

@@ -3,6 +3,8 @@ import type { CiphersImportPayload } from '@/lib/api/vault';
 export interface BitwardenFolderInput {
   id?: string | null;
   name?: string | null;
+  creationDate?: string | null;
+  revisionDate?: string | null;
 }
 
 export interface BitwardenUriInput {
@@ -26,11 +28,20 @@ export interface BitwardenCipherInput {
   reprompt?: number | null;
   key?: string | null;
   folderId?: string | null;
+  organizationId?: string | null;
+  collectionIds?: string[] | null;
+  creationDate?: string | null;
+  revisionDate?: string | null;
+  deletedDate?: string | null;
+  archivedDate?: string | null;
   login?: {
     uris?: BitwardenUriInput[] | null;
+    uri?: string | null;
     username?: string | null;
     password?: string | null;
     totp?: string | null;
+    autofillOnPageLoad?: boolean | null;
+    passwordRevisionDate?: string | null;
     fido2Credentials?: Array<Record<string, unknown>> | null;
   } | null;
   card?: Record<string, unknown> | null;
@@ -62,13 +73,18 @@ export function normalizeBitwardenImport(raw: unknown): CiphersImportPayload {
 
   const foldersRaw = Array.isArray(parsed.folders) ? parsed.folders : [];
   const itemsRaw = Array.isArray(parsed.items) ? parsed.items : [];
-  const folders: Array<{ name: string }> = [];
+  const folders: CiphersImportPayload['folders'] = [];
   const folderIndexById = new Map<string, number>();
   for (const folder of foldersRaw) {
     const name = txt(folder?.name);
     if (!name) continue;
     const idx = folders.length;
-    folders.push({ name });
+    folders.push({
+      id: folder?.id ?? null,
+      name,
+      creationDate: folder?.creationDate ?? null,
+      revisionDate: folder?.revisionDate ?? null,
+    });
     const id = txt(folder?.id);
     if (id) folderIndexById.set(id, idx);
   }
@@ -78,6 +94,7 @@ export function normalizeBitwardenImport(raw: unknown): CiphersImportPayload {
   let hasAnyExplicitFolderLink = false;
   for (const item of itemsRaw) {
     ciphers.push({
+      ...(item as Record<string, unknown>),
       id: item?.id ?? null,
       type: Number(item?.type || 1) || 1,
       name: item?.name ?? 'Untitled',
@@ -85,11 +102,21 @@ export function normalizeBitwardenImport(raw: unknown): CiphersImportPayload {
       favorite: !!item?.favorite,
       reprompt: Number(item?.reprompt ?? 0) || 0,
       key: item?.key ?? null,
+      organizationId: item?.organizationId ?? null,
+      collectionIds: Array.isArray(item?.collectionIds) ? item.collectionIds : null,
+      creationDate: item?.creationDate ?? null,
+      revisionDate: item?.revisionDate ?? null,
+      deletedDate: item?.deletedDate ?? null,
+      archivedDate: item?.archivedDate ?? null,
       login: item?.login
         ? {
+            ...(item.login as Record<string, unknown>),
             username: item.login.username ?? null,
             password: item.login.password ?? null,
             totp: item.login.totp ?? null,
+            uri: item.login.uri ?? null,
+            autofillOnPageLoad: item.login.autofillOnPageLoad ?? null,
+            passwordRevisionDate: item.login.passwordRevisionDate ?? null,
             fido2Credentials: Array.isArray(item.login.fido2Credentials) ? item.login.fido2Credentials : null,
             uris: Array.isArray(item.login.uris)
               ? item.login.uris.map((u) => ({ uri: u?.uri ?? null, match: u?.match ?? null }))

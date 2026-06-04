@@ -338,6 +338,16 @@ export class StorageService {
     await saveStoredCipher(this.db, this.safeBind.bind(this), cipher);
   }
 
+  async importVaultData(folders: Folder[], ciphers: Cipher[], userId: string): Promise<string> {
+    for (const folder of folders) {
+      await saveStoredFolder(this.db, folder);
+    }
+    for (const cipher of ciphers) {
+      await saveStoredCipher(this.db, this.safeBind.bind(this), cipher);
+    }
+    return this.updateRevisionDate(userId);
+  }
+
   async deleteCipher(id: string, userId: string): Promise<void> {
     await deleteStoredCipher(this.db, id, userId);
   }

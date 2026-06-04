@@ -705,6 +705,20 @@ export class EdgeOneBlobStorageService {
     });
   }
 
+  async importVaultData(folders: Folder[], ciphers: Cipher[], userId: string): Promise<string> {
+    return this.mutateState((state) => {
+      for (const folder of folders) {
+        state.folders[folder.id] = clone(folder);
+      }
+      for (const cipher of ciphers) {
+        state.ciphers[cipher.id] = clone({ ...cipher, folderId: normalizeOptionalId(cipher.folderId) });
+      }
+      const revisionDate = new Date().toISOString();
+      state.revisions[userId] = revisionDate;
+      return revisionDate;
+    });
+  }
+
   async deleteCipher(id: string, userId: string): Promise<void> {
     await this.mutateState((state) => {
       const cipher = state.ciphers[id];

@@ -101,7 +101,7 @@ export async function getCiphers(authedFetch: AuthedFetch, cacheKey: string): Pr
 
 export interface CiphersImportPayload {
   ciphers: Array<Record<string, unknown>>;
-  folders: Array<{ name: string }>;
+  folders: Array<{ id?: string | null; name: string; creationDate?: string | null; revisionDate?: string | null }>;
   folderRelationships: Array<{ key: number; value: number }>;
 }
 
@@ -671,6 +671,12 @@ async function buildUpdatedPasswordHistory(
   return nextEntries.slice(0, 5);
 }
 
+function getDraftImportPasswordHistory(draft: VaultDraft): CipherPasswordHistoryEntry[] | null {
+  return Array.isArray(draft.importPasswordHistory) && draft.importPasswordHistory.length > 0
+    ? draft.importPasswordHistory
+    : null;
+}
+
 async function encryptCustomFields(
   fields: VaultDraftField[],
   enc: Uint8Array,
@@ -1109,7 +1115,7 @@ async function buildCipherPayload(
     secureNote: null,
     sshKey: null,
     fields: await encryptCustomFields(draft.customFields || [], keys.enc, keys.mac),
-    passwordHistory: await encryptPasswordHistory(cipher?.passwordHistory, keys.enc, keys.mac),
+    passwordHistory: await encryptPasswordHistory(cipher?.passwordHistory ?? getDraftImportPasswordHistory(draft), keys.enc, keys.mac),
   };
 
   if (cipher?.id) {
@@ -1139,7 +1145,9 @@ async function buildCipherPayload(
       fido2Credentials: await normalizeFido2Credentials(existingFido2, keys.enc, keys.mac),
       uris: await encryptUris(draft.loginUris || [], keys.enc, keys.mac),
     };
-    payload.passwordHistory = await buildUpdatedPasswordHistory(cipher, draft, keys.enc, keys.mac);
+    payload.passwordHistory = cipher
+      ? await buildUpdatedPasswordHistory(cipher, draft, keys.enc, keys.mac)
+      : await encryptPasswordHistory(getDraftImportPasswordHistory(draft), keys.enc, keys.mac);
   } else if (type === 3) {
     payload.card = {
       cardholderName: await encryptTextValue(draft.cardholderName, keys.enc, keys.mac),

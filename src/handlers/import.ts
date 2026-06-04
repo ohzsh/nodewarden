@@ -70,7 +70,10 @@ interface CiphersImportRequest {
     [key: string]: any;
   }>;
   folders: Array<{
+    id?: string | null;
     name: string;
+    creationDate?: string | null;
+    revisionDate?: string | null;
   }>;
   folderRelationships: Array<{
     key: number;   // cipher index
@@ -86,6 +89,27 @@ function readAliasedImportProp<T = unknown>(source: any, aliases: string[]): T |
     }
   }
   return undefined;
+}
+
+function normalizeImportTimestamp(value: unknown, fallback: string | null): string | null {
+  if (value == null || value === '') return fallback;
+  const parsed = new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? fallback : parsed.toISOString();
+}
+
+function bytesToUuid(bytes: Uint8Array): string {
+  const out = Array.from(bytes.slice(0, 16));
+  out[6] = (out[6] & 0x0f) | 0x50;
+  out[8] = (out[8] & 0x3f) | 0x80;
+  const hex = out.map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+async function deterministicImportId(kind: 'folder' | 'cipher', userId: string, sourceId: string | null): Promise<string> {
+  if (!sourceId) return generateUUID();
+  const input = `nodewarden:bitwarden-import:${kind}:${userId}:${sourceId}`;
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return bytesToUuid(new Uint8Array(digest));
 }
 
 // POST /api/ciphers/import - Bitwarden client import endpoint
@@ -116,24 +140,21 @@ export async function handleCiphersImport(request: Request, env: Env, userId: st
   const folderRows: Folder[] = [];
   
   for (let i = 0; i < folders.length; i++) {
-    const folderId = generateUUID();
+    const sourceFolderId = String((folders[i] as any)?.id ?? '').trim() || null;
+    const folderId = await deterministicImportId('folder', userId, sourceFolderId);
     folderIdMap.set(i, folderId);
+    const createdAt = normalizeImportTimestamp((folders[i] as any)?.creationDate, now) || now;
+    const updatedAt = normalizeImportTimestamp((folders[i] as any)?.revisionDate, createdAt) || createdAt;
 
     const folder: Folder = {
       id: folderId,
       userId: userId,
       name: folders[i].name,
-      createdAt: now,
-      updatedAt: now,
+      createdAt,
+      updatedAt,
     };
 
     folderRows.push(folder);
-  }
-
-  if (folderRows.length > 0) {
-    for (const folder of folderRows) {
-      await storage.saveFolder(folder);
-    }
   }
 
   // Build cipher index -> folder id mapping from relationships
@@ -161,9 +182,27 @@ export async function handleCiphersImport(request: Request, env: Env, userId: st
     const passwordHistory = readAliasedImportProp<any[] | null>(c, ['passwordHistory', 'PasswordHistory']);
     const key = readAliasedImportProp<string | null>(c, ['key', 'Key']);
 
+    const cipherId = await deterministicImportId('cipher', userId, sourceId);
+    const createdAt = normalizeImportTimestamp(
+      readAliasedImportProp(c, ['createdAt', 'creationDate', 'CreationDate']),
+      now
+    ) || now;
+    const updatedAt = normalizeImportTimestamp(
+      readAliasedImportProp(c, ['updatedAt', 'revisionDate', 'RevisionDate']),
+      createdAt
+    ) || createdAt;
+    const deletedAt = normalizeImportTimestamp(
+      readAliasedImportProp(c, ['deletedAt', 'deletedDate', 'DeletedDate']),
+      null
+    );
+    const archivedAt = normalizeImportTimestamp(
+      readAliasedImportProp(c, ['archivedAt', 'archivedDate', 'ArchivedDate']),
+      null
+    );
+
     const cipher: Cipher = {
       ...c,
-      id: generateUUID(),
+      id: cipherId,
       userId: userId,
       type: c.type as CipherType,
       folderId: folderId,
@@ -228,10 +267,10 @@ export async function handleCiphersImport(request: Request, env: Env, userId: st
       reprompt: c.reprompt ?? 0,
       sshKey: normalizeCipherSshKeyForCompatibility((c as any).sshKey ?? null),
       key: key ?? null,
-      createdAt: now,
-      updatedAt: now,
-      archivedAt: null,
-      deletedAt: null,
+      createdAt,
+      updatedAt,
+      archivedAt,
+      deletedAt,
     };
     cipher.login = normalizeCipherLoginForStorage(cipher.login);
 
@@ -239,14 +278,7 @@ export async function handleCiphersImport(request: Request, env: Env, userId: st
     cipherMapRows.push({ index: i, sourceId, id: cipher.id });
   }
 
-  if (cipherRows.length > 0) {
-    for (const cipher of cipherRows) {
-      await storage.saveCipher(cipher);
-    }
-  }
-
-  // Update revision date
-  const revisionDate = await storage.updateRevisionDate(userId);
+  const revisionDate = await storage.importVaultData(folderRows, cipherRows, userId);
   notifyUserVaultSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
 
   if (returnCipherMap) {

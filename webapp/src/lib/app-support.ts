@@ -147,6 +147,7 @@ function buildEmptyImportDraft(type: number): VaultDraft {
     sshPublicKey: '',
     sshFingerprint: '',
     customFields: [],
+    importPasswordHistory: null,
   };
 }
 
@@ -160,6 +161,19 @@ export function importCipherToDraft(cipher: Record<string, unknown>, folderId: s
   draft.folderId = folderId || '';
 
   const customFieldsRaw = Array.isArray(cipher.fields) ? cipher.fields : [];
+  draft.importPasswordHistory = Array.isArray(cipher.passwordHistory)
+    ? cipher.passwordHistory
+        .map((entry) => {
+          const row = (entry || {}) as Record<string, unknown>;
+          const password = asText(row.password);
+          if (!password) return null;
+          return {
+            password,
+            lastUsedDate: asText(row.lastUsedDate) || null,
+          };
+        })
+        .filter((entry): entry is NonNullable<VaultDraft['importPasswordHistory']>[number] => !!entry)
+    : null;
   draft.customFields = customFieldsRaw
     .map((raw) => {
       const field = (raw || {}) as Record<string, unknown>;
@@ -181,8 +195,10 @@ export function importCipherToDraft(cipher: Record<string, unknown>, folderId: s
     draft.loginPassword = asText(login.password);
     draft.loginTotp = asText(login.totp);
     const urisRaw = Array.isArray(login.uris) ? login.uris : [];
+    const legacyUri = asText(login.uri).trim();
     const seenUris = new Set<string>();
-    const uris = urisRaw
+    const urisSource = urisRaw.length > 0 ? urisRaw : legacyUri ? [{ uri: legacyUri, match: null }] : [];
+    const uris = urisSource
       .map((u) => {
         const row = (u || {}) as Record<string, unknown>;
         const uri = asText(row.uri).trim();
@@ -278,4 +294,3 @@ export async function deriveSendKeyParts(sendKeyMaterial: Uint8Array): Promise<{
   const derived = await hkdf(sendKeyMaterial, SEND_KEY_SALT, SEND_KEY_PURPOSE, 64);
   return { enc: derived.slice(0, 32), mac: derived.slice(32, 64) };
 }
-

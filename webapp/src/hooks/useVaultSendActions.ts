@@ -93,6 +93,36 @@ function createOptimisticCipherId(): string {
   return `optimistic:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function copyPlainImportMetadata(target: Record<string, unknown>, source: Record<string, unknown>): void {
+  for (const key of [
+    'organizationId',
+    'organizationUseTotp',
+    'collectionIds',
+    'creationDate',
+    'revisionDate',
+    'deletedDate',
+    'archivedDate',
+  ]) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      target[key] = source[key];
+    }
+  }
+
+  const sourceLogin = source.login && typeof source.login === 'object'
+    ? source.login as Record<string, unknown>
+    : null;
+  const targetLogin = target.login && typeof target.login === 'object'
+    ? target.login as Record<string, unknown>
+    : null;
+  if (!sourceLogin || !targetLogin) return;
+
+  for (const key of ['autofillOnPageLoad', 'passwordRevisionDate']) {
+    if (Object.prototype.hasOwnProperty.call(sourceLogin, key)) {
+      targetLogin[key] = sourceLogin[key];
+    }
+  }
+}
+
 function optimisticCipherFromDraft(draft: VaultDraft, current?: Cipher | null): Cipher {
   const now = new Date().toISOString();
   const type = Number(draft.type || current?.type || 1) || 1;
@@ -848,7 +878,11 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
             let folderIndex = folderIndexByName.get(name);
             if (folderIndex == null) {
               folderIndex = nextPayload.folders.length;
-              nextPayload.folders.push({ name: await encryptFolderImportName(session, name) });
+              const legacyId = String(folderRaw.id || '').trim();
+              nextPayload.folders.push({
+                id: legacyId || null,
+                name: await encryptFolderImportName(session, name),
+              });
               folderIndexByName.set(name, folderIndex);
             }
             const legacyId = String(folderRaw.id || '').trim();
@@ -887,6 +921,7 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
           const cipherPayload = await buildCipherImportPayload(session, draft);
           const sourceId = String(raw.id || '').trim();
           if (sourceId) cipherPayload.id = sourceId;
+          copyPlainImportMetadata(cipherPayload, raw);
           nextPayload.ciphers.push(cipherPayload);
         }
 
