@@ -187,7 +187,21 @@ function applyPublicOrigin(url: URL, publicHost: string, publicProtocol: 'http:'
   url.port = origin.port;
 }
 
-function normalizeRequestUrl(context: EdgeOnePagesContext): Request {
+async function copyRequestWithUrl(request: Request, url: string): Promise<Request> {
+  const init: RequestInit & { duplex?: 'half' } = {
+    method: request.method,
+    headers: request.headers,
+  };
+
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    init.body = await request.arrayBuffer();
+    init.duplex = 'half';
+  }
+
+  return new Request(url, init);
+}
+
+async function normalizeRequestUrl(context: EdgeOnePagesContext): Promise<Request> {
   const request = context.request;
   const url = new URL(request.url);
   const configuredOrigin = readConfiguredPublicOrigin(context);
@@ -202,7 +216,7 @@ function normalizeRequestUrl(context: EdgeOnePagesContext): Request {
   const normalizedPathname = url.pathname.length <= 1 ? url.pathname : url.pathname.replace(/\/+$/, '');
   if (normalizedPathname === url.pathname && url.toString() === request.url) return request;
   url.pathname = normalizedPathname;
-  return new Request(url.toString(), request);
+  return copyRequestWithUrl(request, url.toString());
 }
 
 function createEdgeOneEnv(context: EdgeOnePagesContext): Env {
@@ -231,7 +245,7 @@ async function ensureEdgeOneStorageInitialized(env: Env): Promise<void> {
 }
 
 export async function handleEdgeOnePagesRequest(context: EdgeOnePagesContext): Promise<Response> {
-  const request = normalizeRequestUrl(context);
+  const request = await normalizeRequestUrl(context);
   const env = createEdgeOneEnv(context);
   await ensureEdgeOneStorageInitialized(env);
 

@@ -27,6 +27,22 @@ function edgeOneContextWithEnv(request: Request, env: Record<string, string>) {
   };
 }
 
+function edgeOneRequestWithArrayBufferBody(url: string, init: {
+  method: string;
+  headers: Record<string, string>;
+  body: string;
+}): Request {
+  const bytes = new TextEncoder().encode(init.body);
+  return {
+    url,
+    method: init.method,
+    headers: new Headers(init.headers),
+    async arrayBuffer() {
+      return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    },
+  } as unknown as Request;
+}
+
 test('EdgeOne runtime uses the public host for same-origin write checks', async () => {
   const response = await handleEdgeOnePagesRequest(edgeOneContext(new Request('http://localhost:9000/api/accounts/register', {
     method: 'POST',
@@ -98,6 +114,31 @@ test('EdgeOne runtime can use configured public origin when proxy host is intern
 
   assert.equal(response.status, 400);
   assert.notEqual(body.error, 'Forbidden origin');
+  assert.match(String(body.error), /Email, masterPasswordHash, and key are required/);
+});
+
+test('EdgeOne runtime preserves POST body when normalizing configured public origin', async () => {
+  const response = await handleEdgeOnePagesRequest(edgeOneContextWithEnv(edgeOneRequestWithArrayBufferBody(
+    'http://internal.edgeone-function.local/api/accounts/register',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Host: 'internal.edgeone-function.local',
+        Origin: PUBLIC_ORIGIN,
+        Referer: `${PUBLIC_ORIGIN}/register`,
+        'X-Forwarded-For': '203.0.113.10',
+        'X-Forwarded-Proto': 'https',
+      },
+      body: '{}',
+    }
+  ), {
+    NODEWARDEN_PUBLIC_ORIGIN: PUBLIC_ORIGIN,
+  }));
+  const body = await response.json() as { error?: string };
+
+  assert.equal(response.status, 400);
+  assert.notEqual(body.error, 'Invalid JSON');
   assert.match(String(body.error), /Email, masterPasswordHash, and key are required/);
 });
 
