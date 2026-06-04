@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createEdgeOneStoreOptions, handleEdgeOnePagesRequest } from '../src/edgeone/handler';
+import { handleSync } from '../src/handlers/sync';
+import { StorageService } from '../src/services/storage';
+import { createEdgeOneStorageBinding, type EdgeOneBlobStore } from '../src/services/storage-edgeone-blob';
+import type { Env, User } from '../src/types';
 
 const PUBLIC_ORIGIN = 'https://nodewarden.example.edgeone.run';
 const PUBLIC_HOST = 'nodewarden.example.edgeone.run';
@@ -41,6 +45,54 @@ function edgeOneRequestWithArrayBufferBody(url: string, init: {
       return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
     },
   } as unknown as Request;
+}
+
+function createMemoryEdgeOneBlobStore(): EdgeOneBlobStore {
+  const entries = new Map<string, unknown>();
+  return {
+    async set(key, value) {
+      entries.set(key, value);
+    },
+    async setJSON(key, value) {
+      entries.set(key, JSON.stringify(value));
+    },
+    async get(key, options) {
+      const value = entries.get(key);
+      if (value == null) return null;
+      const text = typeof value === 'string' ? value : new TextDecoder().decode(value as ArrayBuffer);
+      if (options?.type === 'text') return text as never;
+      return JSON.parse(text) as never;
+    },
+    async delete(key) {
+      entries.delete(key);
+    },
+  };
+}
+
+function testUser(overrides: Partial<User> = {}): User {
+  const now = '2026-06-04T00:00:00.000Z';
+  return {
+    id: 'edgeone-sync-user',
+    email: 'edgeone-sync@example.invalid',
+    name: 'EdgeOne Sync',
+    masterPasswordHint: null,
+    masterPasswordHash: 'hash',
+    key: 'encrypted-user-key',
+    privateKey: null,
+    publicKey: null,
+    kdfType: 0,
+    kdfIterations: 600000,
+    securityStamp: 'security-stamp',
+    role: 'user',
+    status: 'active',
+    verifyDevices: true,
+    totpSecret: null,
+    totpRecoveryCode: null,
+    apiKey: null,
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
 }
 
 test('EdgeOne runtime uses the public host for same-origin write checks', async () => {
@@ -172,4 +224,27 @@ test('EdgeOne runtime passes external Pages Blob credentials for online-data loc
     projectId: 'pages-nodewarden',
     token: 'edgeone-blob-token',
   });
+});
+
+test('EdgeOne sync does not require Cache API support', async (t) => {
+  const globalWithCaches = globalThis as typeof globalThis & { caches?: unknown };
+  const originalCaches = globalWithCaches.caches;
+  Reflect.deleteProperty(globalWithCaches, 'caches');
+  t.after(() => {
+    if (originalCaches === undefined) Reflect.deleteProperty(globalWithCaches, 'caches');
+    else globalWithCaches.caches = originalCaches;
+  });
+
+  const db = createEdgeOneStorageBinding(createMemoryEdgeOneBlobStore()) as unknown as D1Database;
+  const env = { DB: db, JWT_SECRET: STRONG_TEST_SECRET } as Env;
+  const storage = new StorageService(env.DB);
+  const user = testUser();
+  await storage.createFirstUser(user);
+
+  const response = await handleSync(new Request('https://nodewarden.example.edgeone.run/api/sync'), env, user.id);
+  const body = await response.json() as { object?: string; profile?: { id?: string } };
+
+  assert.equal(response.status, 200);
+  assert.equal(body.object, 'sync');
+  assert.equal(body.profile?.id, user.id);
 });

@@ -11,6 +11,11 @@ import {
 } from '../utils/user-decryption';
 import { buildDomainsResponse } from '../services/domain-rules';
 
+type SyncCache = {
+  match(request: Request): Promise<Response | undefined>;
+  put(request: Request, response: Response): Promise<void>;
+};
+
 // CONTRACT:
 // /api/sync reuses cipherToResponse() as the single cipher response shaper.
 // Filtering invalid cipher responses here protects clients from stored rows that
@@ -32,14 +37,22 @@ function buildSyncCacheRequest(
   return new Request(cacheUrl.toString(), { method: 'GET' });
 }
 
+function getDefaultSyncCache(): SyncCache | null {
+  return (globalThis as { caches?: { default?: SyncCache } }).caches?.default ?? null;
+}
+
 async function readSyncCache(cacheRequest: Request): Promise<Response | null> {
-  const hit = await caches.default.match(cacheRequest);
+  const cache = getDefaultSyncCache();
+  if (!cache) return null;
+  const hit = await cache.match(cacheRequest);
   if (!hit) return null;
   return new Response(hit.body, hit);
 }
 
 async function writeSyncCache(cacheRequest: Request, response: Response): Promise<void> {
-  await caches.default.put(cacheRequest, response.clone());
+  const cache = getDefaultSyncCache();
+  if (!cache) return;
+  await cache.put(cacheRequest, response.clone());
 }
 
 // GET /api/sync
