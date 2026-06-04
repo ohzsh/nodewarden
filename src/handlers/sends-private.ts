@@ -10,6 +10,7 @@ import {
   getSendFileObjectKey,
   putBlobObject,
   deleteBlobObject,
+  createBlobUploadUrl,
 } from '../services/blob-store';
 import { createSendFileUploadToken, verifySendFileUploadToken } from '../utils/jwt';
 import {
@@ -377,11 +378,14 @@ export async function handleCreateFileSendV2(request: Request, env: Env, userId:
     return errorResponse('Server configuration error', 500);
   }
   const uploadToken = await createSendFileUploadToken(userId, send.id, fileId, jwtSecret);
+  const uploadUrl = await createBlobUploadUrl(env, getSendFileObjectKey(send.id, fileId), {
+    contentType: 'application/octet-stream',
+  });
 
   return jsonResponse({
     fileUploadType: 1,
     object: 'send-fileUpload',
-    url: buildDirectUploadUrl(request, `/api/sends/${send.id}/file/${fileId}`, uploadToken),
+    url: uploadUrl || buildDirectUploadUrl(request, `/api/sends/${send.id}/file/${fileId}`, uploadToken),
     sendResponse: sendToResponse(send),
   });
 }
@@ -413,11 +417,14 @@ export async function handleGetSendFileUpload(
     return errorResponse('Server configuration error', 500);
   }
   const uploadToken = await createSendFileUploadToken(userId, send.id, fileId, jwtSecret);
+  const uploadUrl = await createBlobUploadUrl(env, getSendFileObjectKey(send.id, fileId), {
+    contentType: 'application/octet-stream',
+  });
 
   return jsonResponse({
     fileUploadType: 1,
     object: 'send-fileUpload',
-    url: buildDirectUploadUrl(request, `/api/sends/${send.id}/file/${fileId}`, uploadToken),
+    url: uploadUrl || buildDirectUploadUrl(request, `/api/sends/${send.id}/file/${fileId}`, uploadToken),
     sendResponse: sendToResponse(send),
   });
 }

@@ -1,5 +1,5 @@
 import { Env, Attachment, DEFAULT_DEV_SECRET } from '../types';
-import { notifyUserVaultSync } from '../durable/notifications-hub';
+import { notifyUserVaultSync } from '../services/notifications';
 import { StorageService } from '../services/storage';
 import { jsonResponse, errorResponse } from '../utils/response';
 import { buildDirectUploadUrl, getSafeJwtSecret, parseDirectUploadPayload } from '../utils/direct-upload';
@@ -15,6 +15,7 @@ import { LIMITS } from '../config/limits';
 import { readActingDeviceIdentifier } from '../utils/device';
 import {
   deleteBlobObject,
+  createBlobUploadUrl,
   getAttachmentObjectKey,
   getBlobObject,
   getBlobStorageMaxBytes,
@@ -186,11 +187,14 @@ export async function handleCreateAttachment(
     return errorResponse('Server configuration error', 500);
   }
   const uploadToken = await createAttachmentUploadToken(userId, cipherId, attachmentId, jwtSecret);
+  const uploadUrl = await createBlobUploadUrl(env, getAttachmentObjectKey(cipherId, attachmentId), {
+    contentType: 'application/octet-stream',
+  });
 
   return jsonResponse({
     object: 'attachment-fileUpload',
     attachmentId: attachmentId,
-    url: buildDirectUploadUrl(request, `/api/ciphers/${cipherId}/attachment/${attachmentId}`, uploadToken),
+    url: uploadUrl || buildDirectUploadUrl(request, `/api/ciphers/${cipherId}/attachment/${attachmentId}`, uploadToken),
     fileUploadType: 1,
     cipherResponse: cipherToResponse(updatedCipher!, attachments),
   });

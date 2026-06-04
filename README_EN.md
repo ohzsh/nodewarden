@@ -38,7 +38,7 @@
 |---|---|---|---|
 | Web Vault | ✅ | ✅ | **Original Web Vault interface** |
 | Full sync `/api/sync` | ✅ | ✅ | Compatibility optimized for official clients |
-| Attachment upload / download | ✅ | ✅ | Cloudflare R2 or KV |
+| Attachment upload / download | ✅ | ✅ | Cloudflare R2 / KV, or experimental EdgeOne Pages Blob |
 | Send | ✅ | ✅ | Supports both text and file Sends |
 | Import / Export | ✅ | ✅ | Supports Bitwarden JSON / CSV / **ZIP import with attachments** |
 | **Cloud Backup Center** | ❌ | ✅ | **Scheduled backup to WebDAV / E3** |
@@ -96,6 +96,36 @@ npm run deploy:kv
 npm run dev
 npm run dev:kv
 ```
+
+---
+
+## EdgeOne Pages Deploy (Experimental)
+
+EdgeOne Pages deployment is declared in `edgeone.json`, with Cloud Functions under `cloud-functions/`. This mode uses [Tencent Cloud EdgeOne Pages](https://cloud.tencent.com/document/product/1552) Cloud Functions and the Pages Blob SDK instead of Cloudflare D1 / R2 / Durable Objects.
+
+Configure these environment variables in the EdgeOne Pages project:
+
+| Variable | Required | Notes |
+|---|---|---|
+| `JWT_SECRET` | Yes | Random string, at least 32 characters |
+| `NODEWARDEN_EDGEONE_DATA_STORE` | No | Pages Blob data store name, default `nodewarden-data` |
+| `NODEWARDEN_EDGEONE_ATTACHMENT_STORE` | No | Pages Blob attachment / Send file store name, default `nodewarden-attachments` |
+
+Build and deploy:
+
+```bash
+npm install
+npm run build:edgeone
+npm run deploy:edgeone
+```
+
+Current EdgeOne limitations:
+
+- Database state is stored as one Pages Blob JSON document. This is intended for small personal deployments and does not provide D1-style transactions or unique constraints.
+- Attachments and file Sends use Pages Blob signed upload URLs, with a 25 MiB per-object limit.
+- Realtime notifications depend on Cloudflare Durable Objects and are unavailable on EdgeOne; clients fall back to normal sync.
+- Manual export and WebDAV / S3 backup execution use the lightweight EdgeOne D1 facade. D1 shadow-table import / remote restore is not supported yet and returns 501.
+- The scheduled trigger points to `/api/cron/backup` in `edgeone.json`; actual schedule precision depends on EdgeOne Pages.
 
 ---
 

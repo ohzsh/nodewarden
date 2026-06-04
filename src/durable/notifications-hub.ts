@@ -380,6 +380,7 @@ export function notifyUserLogout(
 }
 
 export async function getOnlineUserDevices(env: Env, userId: string): Promise<string[]> {
+  if (!env.NOTIFICATIONS_HUB) return [];
   try {
     const id = env.NOTIFICATIONS_HUB.idFromName(userId);
     const stub = env.NOTIFICATIONS_HUB.get(id);
@@ -400,6 +401,7 @@ async function notifyUserUpdate(
   contextId: string | null,
   targetDeviceIdentifier: string | null
 ): Promise<void> {
+  if (!env.NOTIFICATIONS_HUB) return;
   try {
     const id = env.NOTIFICATIONS_HUB.idFromName(userId);
     const stub = env.NOTIFICATIONS_HUB.get(id);
@@ -444,6 +446,7 @@ export async function notifyUserBackupProgress(
   targetDeviceIdentifier?: string | null
 ): Promise<void> {
   const revisionDate = progress.timestamp || new Date().toISOString();
+  if (!env.NOTIFICATIONS_HUB) return;
   try {
     const id = env.NOTIFICATIONS_HUB.idFromName(userId);
     const stub = env.NOTIFICATIONS_HUB.get(id);

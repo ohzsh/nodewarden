@@ -35,7 +35,7 @@
 |---|---|---|---|
 | 网页密码库 | ✅ | ✅ | **原创Web Vault界面** |
 | 全量同步 `/api/sync` | ✅ | ✅ | 已针对官方客户端做兼容优化 |
-| 附件上传 / 下载 | ✅ | ✅ | Cloudflare R2 或 KV |
+| 附件上传 / 下载 | ✅ | ✅ | Cloudflare R2 / KV，或实验性的 EdgeOne Pages Blob |
 | Send | ✅ | ✅ | 支持文本与文件 Send |
 | 导入 / 导出 | ✅ | ✅ | 支持 Bitwarden JSON / CSV / **ZIP 导入（包括附件）** |
 | **云端备份中心** | ❌ | ✅ | **支持 WebDAV / S3 定时备份** |
@@ -107,6 +107,36 @@ npm run deploy:kv
 npm run dev
 npm run dev:kv
 ```
+
+---
+
+## EdgeOne Pages 部署（实验）
+
+EdgeOne Pages 部署配置见 `edgeone.json`，函数入口位于 `cloud-functions/`。该模式使用 [Tencent Cloud EdgeOne Pages](https://cloud.tencent.com/document/product/1552) 的 Cloud Functions 与 Pages Blob SDK，不依赖 Cloudflare D1 / R2 / Durable Objects。
+
+部署前需要在 EdgeOne Pages 项目中配置环境变量：
+
+| 变量 | 必填 | 说明 |
+|---|---|---|
+| `JWT_SECRET` | 是 | 32 个字符以上的随机字符串 |
+| `NODEWARDEN_EDGEONE_DATA_STORE` | 否 | Pages Blob 数据 store 名，默认 `nodewarden-data` |
+| `NODEWARDEN_EDGEONE_ATTACHMENT_STORE` | 否 | Pages Blob 附件 / Send 文件 store 名，默认 `nodewarden-attachments` |
+
+构建与部署命令：
+
+```bash
+npm install
+npm run build:edgeone
+npm run deploy:edgeone
+```
+
+当前 EdgeOne 模式的限制：
+
+- 数据库使用单个 Pages Blob JSON 文档模拟，适合小规模自用；并发写入不具备 D1 的事务 / 唯一约束保证。
+- 附件和文件 Send 使用 Pages Blob 预签名上传，单对象上限按 25 MiB 处理。
+- 实时通知依赖 Cloudflare Durable Objects，EdgeOne 模式下不可用，客户端会退化为普通同步。
+- 手动导出与 WebDAV / S3 备份运行使用 EdgeOne 的轻量 D1 facade；D1 shadow table 导入 / 远程还原暂不支持，会返回 501。
+- EdgeOne 的定时触发按 `edgeone.json` 配置到 `/api/cron/backup`，实际精度以 EdgeOne Pages 平台为准。
 
 ---
 

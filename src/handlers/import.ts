@@ -1,5 +1,5 @@
 import { Env, Cipher, Folder, CipherType } from '../types';
-import { notifyUserVaultSync } from '../durable/notifications-hub';
+import { notifyUserVaultSync } from '../services/notifications';
 import { StorageService } from '../services/storage';
 import { errorResponse, jsonResponse } from '../utils/response';
 import { readActingDeviceIdentifier } from '../utils/device';
@@ -78,10 +78,6 @@ interface CiphersImportRequest {
   }>;
 }
 
-function bindNull(v: any): any {
-  return v === undefined ? null : v;
-}
-
 function readAliasedImportProp<T = unknown>(source: any, aliases: string[]): T | undefined {
   if (!source || typeof source !== 'object') return undefined;
   for (const key of aliases) {
@@ -90,13 +86,6 @@ function readAliasedImportProp<T = unknown>(source: any, aliases: string[]): T |
     }
   }
   return undefined;
-}
-
-async function runBatchInChunks(db: D1Database, statements: D1PreparedStatement[], chunkSize: number): Promise<void> {
-  for (let i = 0; i < statements.length; i += chunkSize) {
-    const chunk = statements.slice(i, i + chunkSize);
-    await db.batch(chunk);
-  }
 }
 
 // POST /api/ciphers/import - Bitwarden client import endpoint
@@ -121,7 +110,6 @@ export async function handleCiphersImport(request: Request, env: Env, userId: st
   }
 
   const now = new Date().toISOString();
-  const batchChunkSize = LIMITS.performance.bulkMoveChunkSize;
 
   // Create folders and build index -> id mapping
   const folderIdMap = new Map<number, string>();
@@ -143,15 +131,9 @@ export async function handleCiphersImport(request: Request, env: Env, userId: st
   }
 
   if (folderRows.length > 0) {
-    const folderStatements = folderRows.map(folder =>
-      env.DB
-        .prepare(
-          'INSERT INTO folders(id, user_id, name, created_at, updated_at) VALUES(?, ?, ?, ?, ?) ' +
-          'ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id, name=excluded.name, updated_at=excluded.updated_at'
-        )
-        .bind(folder.id, folder.userId, folder.name, folder.createdAt, folder.updatedAt)
-    );
-    await runBatchInChunks(env.DB, folderStatements, batchChunkSize);
+    for (const folder of folderRows) {
+      await storage.saveFolder(folder);
+    }
   }
 
   // Build cipher index -> folder id mapping from relationships
@@ -258,33 +240,9 @@ export async function handleCiphersImport(request: Request, env: Env, userId: st
   }
 
   if (cipherRows.length > 0) {
-    const cipherStatements = cipherRows.map(cipher => {
-      const data = JSON.stringify(cipher);
-      return env.DB
-        .prepare(
-          'INSERT INTO ciphers(id, user_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, archived_at, deleted_at) ' +
-          'VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
-          'ON CONFLICT(id) DO UPDATE SET ' +
-          'user_id=excluded.user_id, type=excluded.type, folder_id=excluded.folder_id, name=excluded.name, notes=excluded.notes, favorite=excluded.favorite, data=excluded.data, reprompt=excluded.reprompt, key=excluded.key, updated_at=excluded.updated_at, archived_at=excluded.archived_at, deleted_at=excluded.deleted_at'
-        )
-        .bind(
-          cipher.id,
-          cipher.userId,
-          Number(cipher.type) || 1,
-          bindNull(cipher.folderId),
-          bindNull(cipher.name),
-          bindNull(cipher.notes),
-          cipher.favorite ? 1 : 0,
-          data,
-          bindNull(cipher.reprompt ?? 0),
-          bindNull(cipher.key),
-          cipher.createdAt,
-          cipher.updatedAt,
-          bindNull(cipher.archivedAt),
-          bindNull(cipher.deletedAt)
-        );
-    });
-    await runBatchInChunks(env.DB, cipherStatements, batchChunkSize);
+    for (const cipher of cipherRows) {
+      await storage.saveCipher(cipher);
+    }
   }
 
   // Update revision date

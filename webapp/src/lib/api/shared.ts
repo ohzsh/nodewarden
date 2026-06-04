@@ -143,12 +143,15 @@ export async function uploadDirectEncryptedPayload(options: DirectEncryptedUploa
     throw new Error(options.unsupportedMessage);
   }
 
+  const uploadUrl = new URL(options.uploadUrl, window.location.origin);
+  const sameOriginUpload = uploadUrl.origin === window.location.origin;
+
   return uploadWithProgress(options.uploadUrl, {
-    accessToken: options.accessToken,
+    accessToken: sameOriginUpload ? options.accessToken : undefined,
     method: 'PUT',
     headers: {
       'Content-Type': 'application/octet-stream',
-      'x-ms-blob-type': 'BlockBlob',
+      ...(sameOriginUpload ? { 'x-ms-blob-type': 'BlockBlob' } : {}),
     },
     body: options.payload,
     onProgress: options.onProgress,

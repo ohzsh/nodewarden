@@ -29,15 +29,20 @@ function hasKvStorage(env: Env): env is Env & { ATTACHMENTS_KV: KVNamespace } {
   return !!env.ATTACHMENTS_KV;
 }
 
-export function getBlobStorageKind(env: Env): 'r2' | 'kv' | null {
+function hasEdgeOneBlobStorage(env: Env): env is Env & { EDGEONE_ATTACHMENTS: NonNullable<Env['EDGEONE_ATTACHMENTS']> } {
+  return !!env.EDGEONE_ATTACHMENTS;
+}
+
+export function getBlobStorageKind(env: Env): 'r2' | 'kv' | 'edgeone-blob' | null {
   // Keep R2 as preferred backend when both are bound.
   if (hasR2Storage(env)) return 'r2';
   if (hasKvStorage(env)) return 'kv';
+  if (hasEdgeOneBlobStorage(env)) return 'edgeone-blob';
   return null;
 }
 
 export function getBlobStorageMaxBytes(env: Env, configuredLimit: number): number {
-  if (getBlobStorageKind(env) === 'kv') {
+  if (getBlobStorageKind(env) === 'kv' || getBlobStorageKind(env) === 'edgeone-blob') {
     return Math.min(configuredLimit, KV_MAX_OBJECT_BYTES);
   }
   return configuredLimit;
@@ -80,6 +85,17 @@ export async function putBlobObject(
     return;
   }
 
+  if (hasEdgeOneBlobStorage(env)) {
+    if (options.size > KV_MAX_OBJECT_BYTES) {
+      throw new Error('KV object too large');
+    }
+    const edgeOneValue = ArrayBuffer.isView(value)
+      ? new Uint8Array(value.buffer, value.byteOffset, value.byteLength).slice().buffer
+      : value;
+    await env.EDGEONE_ATTACHMENTS.set(key, edgeOneValue);
+    return;
+  }
+
   throw new Error('Attachment storage is not configured');
 }
 
@@ -109,6 +125,19 @@ export async function getBlobObject(env: Env, key: string): Promise<BlobObject |
     };
   }
 
+  if (hasEdgeOneBlobStorage(env)) {
+    const body = await env.EDGEONE_ATTACHMENTS.get<ReadableStream>(key, { type: 'stream', consistency: 'strong' });
+    if (!body) return null;
+    let size = 0;
+    let contentType = DEFAULT_CONTENT_TYPE;
+    const withHeaders = await env.EDGEONE_ATTACHMENTS.getWithHeaders?.(key, { consistency: 'strong' });
+    if (withHeaders?.headers) {
+      size = Number(withHeaders.headers['content-length'] || withHeaders.headers['Content-Length'] || 0) || 0;
+      contentType = withHeaders.headers['content-type'] || withHeaders.headers['Content-Type'] || DEFAULT_CONTENT_TYPE;
+    }
+    return { body, size, contentType };
+  }
+
   return null;
 }
 
@@ -121,4 +150,21 @@ export async function deleteBlobObject(env: Env, key: string): Promise<void> {
     await env.ATTACHMENTS_KV.delete(key);
     return;
   }
+  if (hasEdgeOneBlobStorage(env)) {
+    await env.EDGEONE_ATTACHMENTS.delete(key);
+    return;
+  }
+}
+
+export async function createBlobUploadUrl(
+  env: Env,
+  key: string,
+  options: { contentType?: string; expireSeconds?: number } = {}
+): Promise<string | null> {
+  if (!hasEdgeOneBlobStorage(env) || !env.EDGEONE_ATTACHMENTS.createUploadUrl) return null;
+  const result = await env.EDGEONE_ATTACHMENTS.createUploadUrl(key, {
+    expireSeconds: options.expireSeconds,
+    contentType: options.contentType || DEFAULT_CONTENT_TYPE,
+  });
+  return result.url;
 }

@@ -115,6 +115,7 @@ import {
   getUserDomainSettings as getStoredUserDomainSettings,
   saveUserDomainSettings as saveStoredUserDomainSettings,
 } from './storage-domain-rules-repo';
+import { EdgeOneBlobStorageService, isEdgeOneStorageBinding } from './storage-edgeone-blob';
 
 const TWO_FACTOR_REMEMBER_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const STORAGE_SCHEMA_VERSION_KEY = 'schema.version';
@@ -141,7 +142,11 @@ export class StorageService {
   private static readonly ATTACHMENT_TOKEN_CLEANUP_INTERVAL_MS = LIMITS.cleanup.attachmentTokenCleanupIntervalMs;
   private static readonly PERIODIC_CLEANUP_PROBABILITY = LIMITS.cleanup.cleanupProbability;
 
-  constructor(private db: D1Database) {}
+  constructor(private db: D1Database) {
+    if (isEdgeOneStorageBinding(db)) {
+      return new EdgeOneBlobStorageService(db) as any;
+    }
+  }
 
   /**
    * D1 .bind() throws on `undefined` values. This helper converts every

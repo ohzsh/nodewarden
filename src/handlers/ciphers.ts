@@ -11,7 +11,7 @@ import {
   PasswordHistory,
 } from '../types';
 import { StorageService } from '../services/storage';
-import { notifyUserVaultSync } from '../durable/notifications-hub';
+import { notifyUserVaultSync } from '../services/notifications';
 import { jsonResponse, errorResponse } from '../utils/response';
 import { generateUUID } from '../utils/uuid';
 import { deleteAllAttachmentsForCipher, deleteAllAttachmentsForCiphers } from './attachments';

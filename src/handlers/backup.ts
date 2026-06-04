@@ -42,7 +42,7 @@ import {
 import { StorageService } from '../services/storage';
 import { auditRequestMetadata, writeAuditEvent } from '../services/audit-events';
 import { getBlobObject } from '../services/blob-store';
-import { notifyUserBackupProgress, notifyUserBackupRestoreProgress } from '../durable/notifications-hub';
+import { notifyUserBackupProgress, notifyUserBackupRestoreProgress } from '../services/notifications';
 
 function isAdmin(user: User): boolean {
   return user.role === 'admin' && user.status === 'active';

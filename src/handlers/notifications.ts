@@ -40,6 +40,9 @@ export async function handleNotificationsNegotiate(request: Request, env: Env): 
 }
 
 export async function handleNotificationsHub(request: Request, env: Env): Promise<Response> {
+  if (!env.NOTIFICATIONS_HUB) {
+    return errorResponse('Realtime notifications are not configured', 501);
+  }
   const payload = await authenticateNotificationsRequest(request, env);
   if (!payload?.sub) return errorResponse('Unauthorized', 401);
   if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {

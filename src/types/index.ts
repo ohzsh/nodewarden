@@ -1,7 +1,9 @@
+import type { EdgeOneBlobStore } from '../services/storage-edgeone-blob';
+
 // Environment bindings
 export interface Env {
   DB: D1Database;
-  NOTIFICATIONS_HUB: DurableObjectNamespace;
+  NOTIFICATIONS_HUB?: DurableObjectNamespace;
   ASSETS?: {
     fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
   };
@@ -9,6 +11,9 @@ export interface Env {
   ATTACHMENTS?: R2Bucket;
   // Optional fallback for attachment/send file storage (no credit card required).
   ATTACHMENTS_KV?: KVNamespace;
+  // EdgeOne Pages Blob attachment/send-file store.
+  EDGEONE_ATTACHMENTS?: EdgeOneBlobStore;
+  EDGEONE_RUNTIME?: 'pages';
   JWT_SECRET: string;
 }
 

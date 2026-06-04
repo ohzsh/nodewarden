@@ -1,6 +1,6 @@
 import type { Device, DevicePendingAuthRequest, DeviceResponse, ProtectedDeviceResponse as ProtectedDeviceWireResponse } from '../types';
 import { Env } from '../types';
-import { getOnlineUserDevices, notifyUserLogout } from '../durable/notifications-hub';
+import { getOnlineUserDevices, notifyUserLogout } from '../services/notifications';
 import { AuthService } from '../services/auth';
 import { auditRequestMetadata, writeAuditEvent } from '../services/audit-events';
 import { StorageService } from '../services/storage';
@@ -599,4 +599,3 @@ export async function handleClearDeviceToken(
   void deviceIdentifier;
   return new Response(null, { status: 200 });
 }
-

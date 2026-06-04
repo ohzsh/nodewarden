@@ -1,4 +1,5 @@
 import { LIMITS } from '../config/limits';
+import { EdgeOneBlobStorageService, isEdgeOneStorageBinding } from './storage-edgeone-blob';
 
 // Rate limiting service.
 // - Login attempts: D1-backed (low volume, security-critical, needs cross-colo persistence).
@@ -18,7 +19,11 @@ export class RateLimitService {
   private static readonly LOGIN_IP_CLEANUP_INTERVAL_MS = LIMITS.rateLimit.loginIpCleanupIntervalMs;
   private static readonly LOGIN_IP_RETENTION_MS = LIMITS.rateLimit.loginIpRetentionMs;
 
-  constructor(private db: D1Database) {}
+  constructor(private db: D1Database) {
+    if (isEdgeOneStorageBinding(db)) {
+      return new EdgeOneBlobStorageService(db) as any;
+    }
+  }
 
   private shouldRunCleanup(lastRunAt: number, intervalMs: number): boolean {
     const now = Date.now();
