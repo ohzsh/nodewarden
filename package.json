@@ -18,6 +18,7 @@
     "domains:sync": "node scripts/sync-global-domains.mjs",
     "i18n": "node scripts/i18n-validate.cjs",
     "i18n:validate": "node scripts/i18n-validate.cjs",
+    "test": "node --import tsx --test tests/*.test.cjs tests/*.test.ts",
     "test:edgeone": "node --import tsx --test tests/edgeone-compat.test.cjs tests/edgeone-runtime.test.ts",
     "deploy": "wrangler deploy",
     "deploy:kv": "node scripts/ensure-kv.cjs && wrangler deploy -c wrangler.kv.toml",

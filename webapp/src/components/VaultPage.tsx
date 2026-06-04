@@ -331,6 +331,13 @@ export default function VaultPage(props: VaultPageProps) {
     return map;
   }, [props.folders]);
 
+  const duplicateFolderName = useCallback((cipher: Cipher): string | null => {
+    const folderId = String(cipher.folderId || '').trim();
+    if (!folderId) return null;
+    const folder = folderById.get(folderId);
+    return folder?.decName || folder?.name || folderId;
+  }, [folderById]);
+
   const nameCollator = useMemo(
     () => new Intl.Collator(undefined, { sensitivity: 'base', numeric: true }),
     []
@@ -342,12 +349,12 @@ export default function VaultPage(props: VaultPageProps) {
     const counts = new Map<string, number>();
     for (const cipher of props.ciphers) {
       if (!isCipherVisibleInNormalVault(cipher)) continue;
-      const signature = buildCipherDuplicateSignature(cipher);
+      const signature = buildCipherDuplicateSignature(cipher, { folderName: duplicateFolderName(cipher) });
       byId.set(cipher.id, signature);
       counts.set(signature, (counts.get(signature) || 0) + 1);
     }
     return { byId, counts };
-  }, [props.ciphers, sidebarFilter.kind]);
+  }, [props.ciphers, sidebarFilter.kind, duplicateFolderName]);
 
   const filteredCiphers = useMemo(() => {
     const next = props.ciphers.filter((cipher) => {
@@ -957,7 +964,8 @@ const folderName = useCallback((id: string | null | undefined): string => {
     const map: Record<string, boolean> = {};
     const seen = new Set<string>();
     for (const cipher of filteredCiphers) {
-      const signature = duplicateSignatureInfo?.byId.get(cipher.id) || buildCipherDuplicateSignature(cipher);
+      const signature = duplicateSignatureInfo?.byId.get(cipher.id)
+        || buildCipherDuplicateSignature(cipher, { folderName: duplicateFolderName(cipher) });
       if (seen.has(signature)) {
         map[cipher.id] = true;
         continue;
@@ -965,7 +973,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
       seen.add(signature);
     }
     setSelectedMap(map);
-  }, [filteredCiphers, duplicateSignatureInfo]);
+  }, [filteredCiphers, duplicateSignatureInfo, duplicateFolderName]);
   const handleSelectAll = useCallback(() => {
     const map: Record<string, boolean> = {};
     for (const cipher of filteredCiphers) map[cipher.id] = true;
@@ -1278,4 +1286,3 @@ const folderName = useCallback((id: string | null | undefined): string => {
     </>
   );
 }
-
