@@ -23,6 +23,7 @@
     "deploy:kv": "node scripts/ensure-kv.cjs && wrangler deploy -c wrangler.kv.toml",
     "deploy:demo": "npm run build:demo && wrangler pages deploy dist --project-name nw-demo",
     "dev:edgeone": "NODEWARDEN_EDGEONE_LOCAL_BLOB=1 JWT_SECRET=nodewarden-local-edgeone-dev npm run build:edgeone:functions && NODEWARDEN_EDGEONE_LOCAL_BLOB=1 JWT_SECRET=nodewarden-local-edgeone-dev edgeone pages dev --skip-env-sync",
+    "dev:edgeone:online": "npm run build:edgeone:functions && edgeone pages dev",
     "deploy:edgeone": "edgeone pages deploy"
   },
   "keywords": [

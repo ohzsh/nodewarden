@@ -12,6 +12,13 @@ interface EdgeOnePagesContext {
   waitUntil?: (task: Promise<unknown>) => void;
 }
 
+type EdgeOneStoreOptions = {
+  name: string;
+  consistency: 'strong';
+  projectId?: string;
+  token?: string;
+};
+
 const DEFAULT_DATA_STORE = 'nodewarden-data';
 const DEFAULT_ATTACHMENT_STORE = 'nodewarden-attachments';
 const localBlobStores = new Map<string, EdgeOneBlobStore>();
@@ -22,7 +29,7 @@ const UNSUPPORTED_EDGEONE_PATHS = new Set([
   '/api/admin/backup/remote/restore',
 ]);
 
-function readRuntimeValue(context: EdgeOnePagesContext, key: string): string | undefined {
+function readRuntimeValue(context: { env?: Record<string, unknown> }, key: string): string | undefined {
   const fromContext = context.env?.[key];
   if (typeof fromContext === 'string') return fromContext;
   const processEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
@@ -91,7 +98,28 @@ function createEdgeOneBlobStore(context: EdgeOnePagesContext, name: string): Edg
   if (readRuntimeValue(context, 'NODEWARDEN_EDGEONE_LOCAL_BLOB') === '1') {
     return getLocalBlobStore(name);
   }
-  return getStore({ name, consistency: 'strong' }) as EdgeOneBlobStore;
+  return getStore(createEdgeOneStoreOptions(context, name)) as EdgeOneBlobStore;
+}
+
+export function createEdgeOneStoreOptions(context: Pick<EdgeOnePagesContext, 'env'>, name: string): EdgeOneStoreOptions {
+  const projectId = (
+    readRuntimeValue(context, 'NODEWARDEN_EDGEONE_PROJECT_ID') ||
+    readRuntimeValue(context, 'EDGEONE_PAGES_PROJECT_ID')
+  )?.trim();
+  const token = (
+    readRuntimeValue(context, 'NODEWARDEN_EDGEONE_BLOB_TOKEN') ||
+    readRuntimeValue(context, 'EDGEONE_PAGES_BLOB_TOKEN')
+  )?.trim();
+
+  if (projectId && token) {
+    return { name, consistency: 'strong', projectId, token };
+  }
+
+  if (projectId || token) {
+    throw new Error('Both NODEWARDEN_EDGEONE_PROJECT_ID and NODEWARDEN_EDGEONE_BLOB_TOKEN are required for external Pages Blob access.');
+  }
+
+  return { name, consistency: 'strong' };
 }
 
 function firstHeaderValue(value: string | null): string | null {
@@ -135,6 +163,23 @@ function readPublicProtocol(request: Request, fallback: string): 'http:' | 'http
   );
 }
 
+function normalizePublicOrigin(value: string | undefined): URL | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+  try {
+    const origin = new URL(raw);
+    if (origin.protocol !== 'http:' && origin.protocol !== 'https:') return null;
+    if (origin.username || origin.password) return null;
+    return new URL(origin.origin);
+  } catch {
+    return null;
+  }
+}
+
+function readConfiguredPublicOrigin(context: EdgeOnePagesContext): URL | null {
+  return normalizePublicOrigin(readRuntimeValue(context, 'NODEWARDEN_PUBLIC_ORIGIN'));
+}
+
 function applyPublicOrigin(url: URL, publicHost: string, publicProtocol: 'http:' | 'https:'): void {
   const origin = new URL(`${publicProtocol}//${publicHost}`);
   url.protocol = origin.protocol;
@@ -142,11 +187,17 @@ function applyPublicOrigin(url: URL, publicHost: string, publicProtocol: 'http:'
   url.port = origin.port;
 }
 
-function normalizeRequestUrl(request: Request): Request {
+function normalizeRequestUrl(context: EdgeOnePagesContext): Request {
+  const request = context.request;
   const url = new URL(request.url);
-  const publicHost = readPublicHost(request.headers);
-  if (publicHost) {
-    applyPublicOrigin(url, publicHost, readPublicProtocol(request, url.protocol));
+  const configuredOrigin = readConfiguredPublicOrigin(context);
+  if (configuredOrigin) {
+    applyPublicOrigin(url, configuredOrigin.host, configuredOrigin.protocol as 'http:' | 'https:');
+  } else {
+    const publicHost = readPublicHost(request.headers);
+    if (publicHost) {
+      applyPublicOrigin(url, publicHost, readPublicProtocol(request, url.protocol));
+    }
   }
   const normalizedPathname = url.pathname.length <= 1 ? url.pathname : url.pathname.replace(/\/+$/, '');
   if (normalizedPathname === url.pathname && url.toString() === request.url) return request;
@@ -180,7 +231,7 @@ async function ensureEdgeOneStorageInitialized(env: Env): Promise<void> {
 }
 
 export async function handleEdgeOnePagesRequest(context: EdgeOnePagesContext): Promise<Response> {
-  const request = normalizeRequestUrl(context.request);
+  const request = normalizeRequestUrl(context);
   const env = createEdgeOneEnv(context);
   await ensureEdgeOneStorageInitialized(env);
 

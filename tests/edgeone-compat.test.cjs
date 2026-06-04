@@ -23,6 +23,7 @@ test('EdgeOne build metadata is declared for Pages deployment', () => {
     pkg.scripts['dev:edgeone'],
     'NODEWARDEN_EDGEONE_LOCAL_BLOB=1 JWT_SECRET=nodewarden-local-edgeone-dev npm run build:edgeone:functions && NODEWARDEN_EDGEONE_LOCAL_BLOB=1 JWT_SECRET=nodewarden-local-edgeone-dev edgeone pages dev --skip-env-sync'
   );
+  assert.equal(pkg.scripts['dev:edgeone:online'], 'npm run build:edgeone:functions && edgeone pages dev');
   assert.equal(pkg.scripts['deploy:edgeone'], 'edgeone pages deploy');
 
   assert.equal(config.devCommand, 'npm run dev:edgeone:vite --');

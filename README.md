@@ -119,8 +119,11 @@ EdgeOne Pages 部署配置见 `edgeone.json`，函数入口位于 `cloud-functio
 | 变量 | 必填 | 说明 |
 |---|---|---|
 | `JWT_SECRET` | 是 | 32 个字符以上的随机字符串 |
+| `NODEWARDEN_PUBLIC_ORIGIN` | 推荐 | EdgeOne Pages 公开访问地址，例如 `https://nodewarden.example.edgeone.run`；当函数收到内部 Host 时用于同源写入校验与服务地址生成 |
 | `NODEWARDEN_EDGEONE_DATA_STORE` | 否 | Pages Blob 数据 store 名，默认 `nodewarden-data` |
 | `NODEWARDEN_EDGEONE_ATTACHMENT_STORE` | 否 | Pages Blob 附件 / Send 文件 store 名，默认 `nodewarden-attachments` |
+| `NODEWARDEN_EDGEONE_PROJECT_ID` | 本地远程调试 | Pages 项目 ID；仅在本地直连线上 Pages Blob 时需要 |
+| `NODEWARDEN_EDGEONE_BLOB_TOKEN` | 本地远程调试 | Pages API Token；仅在本地直连线上 Pages Blob 时需要 |
 
 构建与部署命令：
 
@@ -128,6 +131,21 @@ EdgeOne Pages 部署配置见 `edgeone.json`，函数入口位于 `cloud-functio
 npm install
 npm run build:edgeone
 npm run deploy:edgeone
+```
+
+本地调试默认使用隔离的内存 Blob：
+
+```bash
+npm run dev:edgeone
+```
+
+如需本地直连线上 Pages Blob 调试，显式传入本地调试 origin、Pages 项目 ID 和 Pages API Token 后运行：
+
+```bash
+NODEWARDEN_PUBLIC_ORIGIN=http://127.0.0.1:8788 \
+NODEWARDEN_EDGEONE_PROJECT_ID=pages-xxx \
+NODEWARDEN_EDGEONE_BLOB_TOKEN=xxx \
+npm run dev:edgeone:online
 ```
 
 当前 EdgeOne 模式的限制：
