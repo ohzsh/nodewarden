@@ -49,9 +49,9 @@ test('scheduler scan start lets a low-frequency cron catch a missed backup slot'
   );
 });
 
-test('scheduler scan start falls back to the current scheduler window for invalid state', () => {
+test('scheduler scan start falls back to max lookback for invalid state', () => {
   const now = new Date('2026-06-10T03:15:00.000Z');
   const scanStart = getBackupSchedulerScanStart('not-a-date', now);
 
-  assert.equal(scanStart.toISOString(), '2026-06-10T03:10:00.000Z');
+  assert.equal(scanStart.toISOString(), '2026-06-09T03:15:00.000Z');
 });

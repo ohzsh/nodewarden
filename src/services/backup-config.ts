@@ -656,15 +656,13 @@ export function isBackupDueNow(
 
 export function getBackupSchedulerScanStart(
   lastScanAtRaw: string | null | undefined,
-  now: Date,
-  windowMinutes: number = BACKUP_SCHEDULER_WINDOW_MINUTES
+  now: Date
 ): Date {
   const nowMs = now.getTime();
-  const fallbackMs = nowMs - Math.max(1, windowMinutes) * 60 * 1000;
   const parsed = lastScanAtRaw ? new Date(lastScanAtRaw) : null;
   const parsedMs = parsed && Number.isFinite(parsed.getTime()) ? parsed.getTime() : NaN;
-  if (!Number.isFinite(parsedMs) || parsedMs > nowMs) return new Date(fallbackMs);
 
   const maxLookbackMs = BACKUP_SCHEDULER_MAX_LOOKBACK_HOURS * 60 * 60 * 1000;
+  if (!Number.isFinite(parsedMs) || parsedMs > nowMs) return new Date(nowMs - maxLookbackMs);
   return new Date(Math.max(parsedMs, nowMs - maxLookbackMs));
 }

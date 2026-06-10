@@ -35,7 +35,7 @@ test('EdgeOne build metadata is declared for Pages deployment', () => {
   assert.deepEqual(config.schedules, [
     {
       name: 'nodewarden-edgeone-backup',
-      cron: '*/30 * * * *',
+      cron: '0 3 * * *',
       path: '/api/cron/backup',
       method: 'POST',
       timezone: 'UTC',
