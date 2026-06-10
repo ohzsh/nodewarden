@@ -1,7 +1,7 @@
 import { zipSync, unzipSync } from 'fflate';
 import type { Env } from '../types';
 import { APP_VERSION } from '../../shared/app-version';
-import { BACKUP_SETTINGS_CONFIG_KEY } from './backup-config';
+import { BACKUP_SCHEDULER_LAST_SCAN_CONFIG_KEY, BACKUP_SETTINGS_CONFIG_KEY } from './backup-config';
 import { exportPortableBackupSettingsEnvelope } from './backup-settings-crypto';
 import {
   getAttachmentObjectKey,
@@ -108,7 +108,7 @@ function sanitizeConfigRowsForExport(rows: SqlRow[]): SqlRow[] {
   const sanitized: SqlRow[] = [];
   for (const row of rows) {
     const key = String(row.key || '').trim();
-    if (!key || key === BACKUP_RUNNER_LOCK_CONFIG_KEY) continue;
+    if (!key || key === BACKUP_RUNNER_LOCK_CONFIG_KEY || key === BACKUP_SCHEDULER_LAST_SCAN_CONFIG_KEY) continue;
 
     if (key === BACKUP_SETTINGS_CONFIG_KEY) {
       const portableOnly = exportPortableBackupSettingsEnvelope(typeof row.value === 'string' ? row.value : null);

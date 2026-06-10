@@ -13,7 +13,7 @@ import {
   saveAdminBackupSettings,
 } from '@/lib/api/backup';
 import { downloadBytesAsFile } from '@/lib/download';
-import { dispatchBackupProgress } from '@/lib/backup-restore-progress';
+import { createRemoteBackupRunCompleteProgress, dispatchBackupProgress } from '@/lib/backup-restore-progress';
 import type { AuthedFetch } from '@/lib/api/shared';
 
 interface UseBackupActionsOptions {
@@ -69,7 +69,9 @@ export default function useBackupActions(options: UseBackupActionsOptions) {
       },
 
       async runRemoteBackup(destinationId?: string | null) {
-        return runAdminBackupNow(authedFetch, destinationId);
+        const result = await runAdminBackupNow(authedFetch, destinationId);
+        dispatchBackupProgress(createRemoteBackupRunCompleteProgress(result));
+        return result;
       },
 
       async listRemoteBackups(destinationId: string, path: string) {

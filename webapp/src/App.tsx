@@ -54,6 +54,7 @@ import { useToastManager } from '@/hooks/useToastManager';
 import { t } from '@/lib/i18n';
 import { APP_NOTIFY_EVENT, type AppNotifyDetail } from '@/lib/app-notify';
 import { dispatchBackupProgress, type BackupProgressDetail } from '@/lib/backup-restore-progress';
+import { isRealtimeNotificationsUnsupportedStatus } from '@/lib/realtime-notifications';
 import { decryptSends, decryptVaultCore } from '@/lib/vault-decrypt';
 import { decryptSendsInWorker, decryptVaultCoreInWorker } from '@/lib/vault-worker';
 import {
@@ -1193,6 +1194,8 @@ export default function App() {
     let disposed = false;
     let socket: WebSocket | null = null;
     let reconnectTimer: number | null = null;
+    let connecting = false;
+    let realtimeUnsupported = false;
     let reconnectAttempts = 0;
 
     const clearReconnectTimer = () => {
@@ -1203,7 +1206,7 @@ export default function App() {
     };
 
     const scheduleReconnect = () => {
-      if (disposed) return;
+      if (disposed || realtimeUnsupported) return;
       clearReconnectTimer();
       const delay = Math.min(10000, 1000 * Math.max(1, reconnectAttempts + 1));
       reconnectAttempts += 1;
@@ -1214,18 +1217,10 @@ export default function App() {
     };
 
     const connect = () => {
-      if (disposed) return;
+      if (disposed || realtimeUnsupported || connecting || socket) return;
       const accessToken = session.accessToken;
       if (!accessToken) return;
-      try {
-        const hubUrl = new URL('/notifications/hub', window.location.origin);
-        hubUrl.searchParams.set('access_token', accessToken);
-        hubUrl.protocol = hubUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-        socket = new WebSocket(hubUrl.toString());
-      } catch {
-        scheduleReconnect();
-        return;
-      }
+      connecting = true;
 
       let pingTimer: number | null = null;
 
@@ -1236,73 +1231,112 @@ export default function App() {
         }
       };
 
-      socket.addEventListener('open', () => {
-        reconnectAttempts = 0;
-        void refreshAuthorizedDevicesRef.current();
+      const openSocket = () => {
         try {
-          socket?.send(`{"protocol":"json","version":1}${SIGNALR_RECORD_SEPARATOR}`);
+          const hubUrl = new URL('/notifications/hub', window.location.origin);
+          hubUrl.searchParams.set('access_token', accessToken);
+          hubUrl.protocol = hubUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+          socket = new WebSocket(hubUrl.toString());
         } catch {
-          socket?.close();
+          scheduleReconnect();
           return;
         }
-        clearPingTimer();
-        pingTimer = window.setInterval(() => {
+
+        socket.addEventListener('open', () => {
+          reconnectAttempts = 0;
+          void refreshAuthorizedDevicesRef.current();
           try {
-            socket?.send(`{"type":6}${SIGNALR_RECORD_SEPARATOR}`);
+            socket?.send(`{"protocol":"json","version":1}${SIGNALR_RECORD_SEPARATOR}`);
           } catch {
-            // send failure will trigger close event
-          }
-        }, 15_000);
-      });
-
-      socket.addEventListener('message', (event) => {
-        if (disposed) return;
-        if (typeof event.data !== 'string') return;
-
-        const frames = parseSignalRTextFrames(event.data);
-        for (const frame of frames) {
-          if (frame.type !== 1 || frame.target !== 'ReceiveMessage') continue;
-          const updateType = Number(frame.arguments?.[0]?.Type || 0);
-          if (updateType === SIGNALR_UPDATE_TYPE_LOG_OUT) {
-            logoutNow();
+            socket?.close();
             return;
           }
-          if (updateType === SIGNALR_UPDATE_TYPE_DEVICE_STATUS) {
-            void refreshAuthorizedDevicesRef.current();
-            continue;
-          }
-          if (updateType === SIGNALR_UPDATE_TYPE_BACKUP_RESTORE_PROGRESS) {
-            const payload = frame.arguments?.[0]?.Payload;
-            if (isBackupProgressDetail(payload)) dispatchBackupProgress(payload);
-            continue;
-          }
-          if (updateType !== SIGNALR_UPDATE_TYPE_SYNC_VAULT) continue;
-          const contextId = String(frame.arguments?.[0]?.ContextId || '').trim();
-          if (contextId && contextId === getCurrentDeviceIdentifier()) continue;
-          if (notificationRefreshTimerRef.current !== null) {
-            window.clearTimeout(notificationRefreshTimerRef.current);
-          }
-          notificationRefreshTimerRef.current = window.setTimeout(() => {
-            notificationRefreshTimerRef.current = null;
-            void silentRefreshVaultRef.current();
-          }, 250);
-        }
-      });
+          clearPingTimer();
+          pingTimer = window.setInterval(() => {
+            try {
+              socket?.send(`{"type":6}${SIGNALR_RECORD_SEPARATOR}`);
+            } catch {
+              // send failure will trigger close event
+            }
+          }, 15_000);
+        });
 
-      socket.addEventListener('close', () => {
-        socket = null;
-        clearPingTimer();
-        void refreshAuthorizedDevicesRef.current();
-        scheduleReconnect();
-      });
+        socket.addEventListener('message', (event) => {
+          if (disposed) return;
+          if (typeof event.data !== 'string') return;
 
-      socket.addEventListener('error', () => {
-        try {
-          socket?.close();
-        } catch {
-          // ignore close races
-        }
-      });
+          const frames = parseSignalRTextFrames(event.data);
+          for (const frame of frames) {
+            if (frame.type !== 1 || frame.target !== 'ReceiveMessage') continue;
+            const updateType = Number(frame.arguments?.[0]?.Type || 0);
+            if (updateType === SIGNALR_UPDATE_TYPE_LOG_OUT) {
+              logoutNow();
+              return;
+            }
+            if (updateType === SIGNALR_UPDATE_TYPE_DEVICE_STATUS) {
+              void refreshAuthorizedDevicesRef.current();
+              continue;
+            }
+            if (updateType === SIGNALR_UPDATE_TYPE_BACKUP_RESTORE_PROGRESS) {
+              const payload = frame.arguments?.[0]?.Payload;
+              if (isBackupProgressDetail(payload)) dispatchBackupProgress(payload);
+              continue;
+            }
+            if (updateType !== SIGNALR_UPDATE_TYPE_SYNC_VAULT) continue;
+            const contextId = String(frame.arguments?.[0]?.ContextId || '').trim();
+            if (contextId && contextId === getCurrentDeviceIdentifier()) continue;
+            if (notificationRefreshTimerRef.current !== null) {
+              window.clearTimeout(notificationRefreshTimerRef.current);
+            }
+            notificationRefreshTimerRef.current = window.setTimeout(() => {
+              notificationRefreshTimerRef.current = null;
+              void silentRefreshVaultRef.current();
+            }, 250);
+          }
+        });
+
+        socket.addEventListener('close', () => {
+          socket = null;
+          clearPingTimer();
+          void refreshAuthorizedDevicesRef.current();
+          scheduleReconnect();
+        });
+
+        socket.addEventListener('error', () => {
+          try {
+            socket?.close();
+          } catch {
+            // ignore close races
+          }
+        });
+      };
+
+      fetch('/notifications/hub/negotiate', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'X-NodeWarden-Web': '1',
+        },
+      })
+        .then((response) => {
+          if (disposed) return;
+          if (isRealtimeNotificationsUnsupportedStatus(response.status)) {
+            realtimeUnsupported = true;
+            clearReconnectTimer();
+            return;
+          }
+          if (!response.ok) {
+            scheduleReconnect();
+            return;
+          }
+          openSocket();
+        })
+        .catch(() => {
+          scheduleReconnect();
+        })
+        .finally(() => {
+          connecting = false;
+        });
     };
 
     connect();

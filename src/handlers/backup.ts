@@ -10,10 +10,12 @@ import {
 import {
   type BackupDestinationRecord,
   type BackupSettingsInput,
+  BACKUP_SCHEDULER_LAST_SCAN_CONFIG_KEY,
   BACKUP_SCHEDULER_WINDOW_MINUTES,
   getBackupLocalDateKey,
   getDefaultBackupSettings,
   getBackupSettingsRepairState,
+  getBackupSchedulerScanStart,
   hasBackupSlotBetween,
   isBackupDueNow,
   loadBackupSettings,
@@ -528,7 +530,10 @@ async function runImportAndAudit(
 export async function runScheduledBackupIfDue(env: Env): Promise<void> {
   await withBackupRunnerLease(env, 'scheduled', async (keepAlive) => {
     const storage = new StorageService(env.DB);
-    let scanStartMs = Date.now();
+    let scanStart = getBackupSchedulerScanStart(
+      await storage.getConfigValue(BACKUP_SCHEDULER_LAST_SCAN_CONFIG_KEY),
+      new Date()
+    );
 
     while (true) {
       await keepAlive();
@@ -536,18 +541,20 @@ export async function runScheduledBackupIfDue(env: Env): Promise<void> {
       const now = new Date();
       const dueDestinations = settings.destinations.filter((destination) =>
         isBackupDueNow(destination, now, BACKUP_SCHEDULER_WINDOW_MINUTES)
-        || hasBackupSlotBetween(destination, new Date(scanStartMs), now)
+        || hasBackupSlotBetween(destination, scanStart, now)
       );
 
       if (!dueDestinations.length) {
+        await storage.setConfigValue(BACKUP_SCHEDULER_LAST_SCAN_CONFIG_KEY, now.toISOString());
         return;
       }
 
-      scanStartMs = now.getTime();
       for (const destination of dueDestinations) {
         await keepAlive();
         await executeConfiguredBackup(env, storage, null, 'scheduled', destination.id, keepAlive);
       }
+      await storage.setConfigValue(BACKUP_SCHEDULER_LAST_SCAN_CONFIG_KEY, now.toISOString());
+      scanStart = now;
     }
   });
 }
