@@ -41,7 +41,7 @@ export interface EdgeOneStorageBinding {
   batch<T = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]>;
 }
 
-interface EdgeOneState {
+export interface EdgeOneState {
   version: 1;
   config: Record<string, string>;
   users: Record<string, User>;
@@ -72,9 +72,9 @@ interface EdgeOneState {
   }>;
 }
 
-const STATE_KEY = 'state/nodewarden.json';
-const EDGEONE_SCHEMA_VERSION_KEY = 'schema.version';
-const EDGEONE_SCHEMA_VERSION = '2026-06-04-edgeone-blob-document';
+export const EDGEONE_STATE_KEY = 'state/nodewarden.json';
+export const EDGEONE_SCHEMA_VERSION_KEY = 'schema.version';
+export const EDGEONE_SCHEMA_VERSION = '2026-06-04-edgeone-blob-document';
 const TWO_FACTOR_REMEMBER_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function createEdgeOneStorageBinding(
@@ -101,7 +101,7 @@ export function isEdgeOneStorageBinding(value: unknown): value is EdgeOneStorage
   return !!value && typeof value === 'object' && (value as EdgeOneStorageBinding).__nodewardenEdgeOneStorage === true;
 }
 
-function emptyState(): EdgeOneState {
+export function createEmptyEdgeOneState(): EdgeOneState {
   return {
     version: 1,
     config: {},
@@ -133,8 +133,8 @@ function normalizeRecord<T>(value: unknown): Record<string, T> {
     : {};
 }
 
-function normalizeState(value: unknown): EdgeOneState {
-  const next = emptyState();
+export function normalizeEdgeOneState(value: unknown): EdgeOneState {
+  const next = createEmptyEdgeOneState();
   if (!value || typeof value !== 'object') return next;
   const raw = value as Partial<EdgeOneState>;
   return {
@@ -160,12 +160,12 @@ function normalizeState(value: unknown): EdgeOneState {
 }
 
 async function loadEdgeOneState(binding: EdgeOneStorageBinding): Promise<EdgeOneState> {
-  const raw = await binding.dataStore.get(STATE_KEY, { type: 'json', consistency: 'strong' });
-  return normalizeState(raw);
+  const raw = await binding.dataStore.get(EDGEONE_STATE_KEY, { type: 'json', consistency: 'strong' });
+  return normalizeEdgeOneState(raw);
 }
 
 async function saveEdgeOneState(binding: EdgeOneStorageBinding, state: EdgeOneState): Promise<void> {
-  await binding.dataStore.setJSON(STATE_KEY, state);
+  await binding.dataStore.setJSON(EDGEONE_STATE_KEY, state);
 }
 
 async function mutateEdgeOneState<T>(

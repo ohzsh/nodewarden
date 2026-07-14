@@ -42,6 +42,8 @@ import {
   uploadBackupArchive,
 } from '../services/backup-uploader';
 import { StorageService } from '../services/storage';
+import { importEdgeOneBackupArchiveBytes } from '../services/edgeone-backup-restore';
+import { isEdgeOneStorageBinding } from '../services/storage-edgeone-blob';
 import { auditRequestMetadata, writeAuditEvent } from '../services/audit-events';
 import { getBlobObject } from '../services/blob-store';
 import { notifyUserBackupProgress, notifyUserBackupRestoreProgress } from '../services/notifications';
@@ -480,6 +482,7 @@ function toImportStatusCode(message: string): number {
   const lower = message.toLowerCase();
   if (lower.includes('invalid backup') || lower.includes('invalid json')) return 400;
   if (lower.includes('fresh instance')) return 409;
+  if (lower.includes('does not support archives containing attachments')) return 409;
   if (lower.includes('not configured') || lower.includes('kv')) return 409;
   return 500;
 }
@@ -1018,11 +1021,29 @@ export async function handleAdminImportBackup(request: Request, env: Env, actorU
     if (!checksumOk && !allowChecksumMismatch) {
       return errorResponse('Backup file checksum does not match its filename', 400);
     }
-    const imported = await runImportAndAudit(env, request, actorUser, archiveBytes, fileName || 'nodewarden_backup.zip', replaceExisting, {
-      trigger: 'local',
-      bytes: archiveBytes.byteLength,
-      checksumMismatchAccepted: !checksumOk,
-    });
+    if (isEdgeOneStorageBinding(env.DB)) {
+      const imported = await importEdgeOneBackupArchiveBytes(
+        archiveBytes,
+        env.DB.dataStore,
+        actorUser.id,
+        replaceExisting
+      );
+      return jsonResponse({ ...imported.result, rollbackKey: imported.rollbackKey });
+    }
+
+    const imported = await runImportAndAudit(
+      env,
+      request,
+      actorUser,
+      archiveBytes,
+      fileName || 'nodewarden_backup.zip',
+      replaceExisting,
+      {
+        trigger: 'local',
+        bytes: archiveBytes.byteLength,
+        checksumMismatchAccepted: !checksumOk,
+      }
+    );
     return jsonResponse(imported.result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Backup import failed';

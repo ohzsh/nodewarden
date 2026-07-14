@@ -212,6 +212,22 @@ test('EdgeOne runtime uses configured public origin in config responses', async 
   assert.equal(body.environment?.identity, `${PUBLIC_ORIGIN}/identity`);
 });
 
+test('EdgeOne runtime routes local backup import through authentication', async () => {
+  const response = await handleEdgeOnePagesRequest(edgeOneContext(new Request('http://localhost:9000/api/admin/backup/import', {
+    method: 'POST',
+    headers: {
+      Host: PUBLIC_HOST,
+      Origin: PUBLIC_ORIGIN,
+      'X-Forwarded-For': '203.0.113.10',
+      'X-Forwarded-Proto': 'https',
+    },
+  })));
+  const body = await response.json() as { error?: string };
+
+  assert.equal(response.status, 401);
+  assert.equal(body.error, 'Unauthorized');
+});
+
 test('EdgeOne runtime passes external Pages Blob credentials for online-data local debugging', () => {
   const options = createEdgeOneStoreOptions(edgeOneContextWithEnv(new Request('http://localhost/config'), {
     NODEWARDEN_EDGEONE_PROJECT_ID: 'pages-nodewarden',

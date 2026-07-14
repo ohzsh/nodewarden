@@ -153,7 +153,7 @@ npm run dev:edgeone:online
 - 数据库使用单个 Pages Blob JSON 文档模拟，适合小规模自用；并发写入不具备 D1 的事务 / 唯一约束保证。
 - 附件和文件 Send 使用 Pages Blob 预签名上传，单对象上限按 25 MiB 处理。
 - 实时通知依赖 Cloudflare Durable Objects，EdgeOne 模式下不可用，客户端会退化为普通同步。
-- 手动导出与 WebDAV / S3 备份运行使用 EdgeOne 的轻量 D1 facade；D1 shadow table 导入 / 远程还原暂不支持，会返回 501。
+- 手动导出与 WebDAV / S3 备份运行使用 EdgeOne 的轻量 D1 facade；本地备份支持导入不含附件的归档，远程还原仍依赖 D1 shadow table，暂不支持并会返回 501。
 - EdgeOne 的定时触发按 `edgeone.json` 配置到 `/api/cron/backup`，实际精度以 EdgeOne Pages 平台为准。
 
 ---

@@ -19,7 +19,7 @@
     "i18n": "node scripts/i18n-validate.cjs",
     "i18n:validate": "node scripts/i18n-validate.cjs",
     "test": "node --import tsx --test tests/*.test.cjs tests/*.test.ts",
-    "test:edgeone": "node --import tsx --test tests/edgeone-compat.test.cjs tests/edgeone-runtime.test.ts",
+    "test:edgeone": "node --import tsx --test tests/edgeone-compat.test.cjs tests/edgeone-runtime.test.ts tests/edgeone-backup-restore.test.ts",
     "deploy": "wrangler deploy",
     "deploy:kv": "node scripts/ensure-kv.cjs && wrangler deploy -c wrangler.kv.toml",
     "deploy:demo": "npm run build:demo && wrangler pages deploy dist --project-name nw-demo",

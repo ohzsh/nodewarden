@@ -25,7 +25,6 @@ const localBlobStores = new Map<string, EdgeOneBlobStore>();
 
 const UNSUPPORTED_EDGEONE_PATHS = new Set([
   '/notifications/hub',
-  '/api/admin/backup/import',
   '/api/admin/backup/remote/restore',
 ]);
 
